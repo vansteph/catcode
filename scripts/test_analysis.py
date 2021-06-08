@@ -199,6 +199,44 @@ int groups_search(const struct group_info *group_info, gid_t grp)
 
 /**
 
+ * set_groups - Change a group subscription in a set of credentials
+
+ * @new: The newly prepared set of credentials to alter
+
+ * @group_info: The group list to install
+
+ *
+
+ * Validate a group subscription and, if valid, insert it into a set
+
+ * of credentials.
+
+ */
+
+int set_groups(struct cred *new, struct group_info *group_info)
+
+{
+
+	put_group_info(new->group_info);
+
+	groups_sort(group_info);
+
+	get_group_info(group_info);
+
+	new->group_info = group_info;
+
+	return 0;
+
+}
+
+
+
+EXPORT_SYMBOL(set_groups);
+
+
+
+/**
+
  * set_current_groups - Change current's group subscription
 
  * @group_info: The group list to impose
@@ -242,5 +280,57 @@ int set_current_groups(struct group_info *group_info)
 
 
 	return commit_creds(new);
+
+}
+
+
+
+EXPORT_SYMBOL(set_current_groups);
+
+
+
+SYSCALL_DEFINE2(getgroups, int, gidsetsize, gid_t _user *, grouplist)
+
+{
+
+	const struct cred *cred = current_cred();
+
+	int i;
+
+
+
+	if (gidsetsize < 0)
+
+		return -EINVAL;
+
+
+
+	/* no need to grab task_lock here; it cannot change */
+
+	i = cred->group_info->ngroups;
+
+	if (gidsetsize) {
+
+		if (i > gidsetsize) {
+
+			i = -EINVAL;
+
+			goto out;
+
+		}
+
+		if (groups_to_user(grouplist, cred->group_info)) {
+
+			i = -EFAULT;
+
+			goto out;
+
+		}
+
+	}
+
+out:
+
+	return i;
 
 }
