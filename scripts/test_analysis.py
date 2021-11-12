@@ -55,6 +55,91 @@ struct group_info *groups_alloc(int gidsetsize){
 	return group_info;
 
 
+
+out_undo_partial_alloc:
+
+	while (--i >= 0) {
+
+		free_page((unsigned long)group_info->blocks[i]);
+
+	}
+
+	kfree(group_info);
+
+	return NULL;
+
+}
+
+
+
+EXPORT_SYMBOL(groups_alloc);
+
+
+
+void groups_free(struct group_info *group_info)
+
+{
+
+	if (group_info->blocks[0] != group_info->small_block) {
+
+		int i;
+
+		for (i = 0; i < group_info->nblocks; i++)
+
+			free_page((unsigned long)group_info->blocks[i]);
+
+	}
+
+	kfree(group_info);
+
+}
+
+
+
+EXPORT_SYMBOL(groups_free);
+
+
+
+/* export the group_info to a user-space array */
+
+static int groups_to_user(gid_t _user *grouplist,
+
+			  const struct group_info *group_info)
+
+{
+
+	int i;
+
+	unsigned int count = group_info->ngroups;
+
+
+
+	for (i = 0; i < group_info->nblocks; i++) {
+
+		unsigned int cp_count = min(NGROUPS_PER_BLOCK, count);
+
+		unsigned int len = cp_count * sizeof(*grouplist);
+
+
+
+		if (copy_to_user(grouplist, group_info->blocks[i], len))
+
+			return -EFAULT;
+
+
+
+		grouplist += NGROUPS_PER_BLOCK;
+
+		count -= cp_count;
+
+	}
+
+	return 0;
+
+}
+
+
+
 /* fill a group_info from a user-space array - it must be allocated already */
 
 static int groups_from_user(struct group_info *group_info,
@@ -332,5 +417,91 @@ SYSCALL_DEFINE2(getgroups, int, gidsetsize, gid_t _user *, grouplist)
 out:
 
 	return i;
+
+}
+
+
+
+/*
+
+ *	SMP: Our groups are copy-on-write. We can set them safely
+
+ *	without another task interfering.
+
+ */
+
+
+
+SYSCALL_DEFINE2(setgroups, int, gidsetsize, gid_t _user *, grouplist)
+
+{
+
+	struct group_info *group_info;
+
+	int retval;
+
+
+
+	if (!nsown_capable(CAP_SETGID))
+
+		return -EPERM;
+
+	if ((unsigned)gidsetsize > NGROUPS_MAX)
+
+		return -EINVAL;
+
+
+
+	group_info = groups_alloc(gidsetsize);
+
+	if (!group_info)
+
+		return -ENOMEM;
+
+	retval = groups_from_user(group_info, grouplist);
+
+	if (retval) {
+
+		put_group_info(group_info);
+
+		return retval;
+
+	}
+
+
+
+	retval = set_current_groups(group_info);
+
+	put_group_info(group_info);
+
+
+
+	return retval;
+
+}
+
+
+
+/*
+
+ * Check whether we're fsgid/egid or in the supplemental group..
+
+ */
+
+int in_group_p(gid_t grp)
+
+{
+
+	const struct cred *cred = current_cred();
+
+	int retval = 1;
+
+
+
+	if (grp != cred->fsgid)
+
+		retval = groups_search(cred->group_info, grp);
+
+	return retval;
 
 }
