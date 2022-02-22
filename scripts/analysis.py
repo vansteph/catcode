@@ -70,6 +70,8 @@ out_undo_partial_alloc:
 
 }
 
+
+
 EXPORT_SYMBOL(groups_alloc);
 
 
@@ -177,6 +179,109 @@ static int groups_from_user(struct group_info *group_info,
 }
 
 
+
+/* a simple Shell sort */
+
+static void groups_sort(struct group_info *group_info)
+
+{
+
+	int base, max, stride;
+
+	int gidsetsize = group_info->ngroups;
+
+
+
+	for (stride = 1; stride < gidsetsize; stride = 3 * stride + 1)
+
+		; /* nothing */
+
+	stride /= 3;
+
+
+
+	while (stride) {
+
+		max = gidsetsize - stride;
+
+		for (base = 0; base < max; base++) {
+
+			int left = base;
+
+			int right = left + stride;
+
+			gid_t tmp = GROUP_AT(group_info, right);
+
+
+
+			while (left >= 0 && GROUP_AT(group_info, left) > tmp) {
+
+				GROUP_AT(group_info, right) =
+
+				    GROUP_AT(group_info, left);
+
+				right = left;
+
+				left -= stride;
+
+			}
+
+			GROUP_AT(group_info, right) = tmp;
+
+		}
+
+		stride /= 3;
+
+	}
+
+}
+
+
+
+/* a simple bsearch */
+
+int groups_search(const struct group_info *group_info, gid_t grp)
+
+{
+
+	unsigned int left, right;
+
+
+
+	if (!group_info)
+
+		return 0;
+
+
+
+	left = 0;
+
+	right = group_info->ngroups;
+
+	while (left < right) {
+
+		unsigned int mid = left + (right - left)/2;
+
+		if (grp > GROUP_AT(group_info, mid))
+
+			left = mid + 1;
+
+		else if (grp < GROUP_AT(group_info, mid))
+
+			right = mid;
+
+		else
+
+			return 1;
+
+	}
+
+	return 0;
+
+}
+
+
+
 /**
 
  * set_groups - Change a group subscription in a set of credentials
@@ -206,5 +311,109 @@ int set_groups(struct cred *new, struct group_info *group_info)
 	new->group_info = group_info;
 
 	return 0;
+
+}
+
+
+
+EXPORT_SYMBOL(set_groups);
+
+
+
+/**
+
+ * set_current_groups - Change current's group subscription
+
+ * @group_info: The group list to impose
+
+ *
+
+ * Validate a group subscription and, if valid, impose it upon current's task
+
+ * security record.
+
+ */
+
+int set_current_groups(struct group_info *group_info)
+
+{
+
+	struct cred *new;
+
+	int ret;
+
+
+
+	new = prepare_creds();
+
+	if (!new)
+
+		return -ENOMEM;
+
+
+
+	ret = set_groups(new, group_info);
+
+	if (ret < 0) {
+
+		abort_creds(new);
+
+		return ret;
+
+	}
+
+
+
+	return commit_creds(new);
+
+}
+
+
+
+EXPORT_SYMBOL(set_current_groups);
+
+
+
+SYSCALL_DEFINE2(getgroups, int, gidsetsize, gid_t _user *, grouplist)
+
+{
+
+	const struct cred *cred = current_cred();
+
+	int i;
+
+
+
+	if (gidsetsize < 0)
+
+		return -EINVAL;
+
+	/* no need to grab task_lock here; it cannot change */
+
+	i = cred->group_info->ngroups;
+
+	if (gidsetsize) {
+
+		if (i > gidsetsize) {
+
+			i = -EINVAL;
+
+			goto out;
+
+		}
+
+		if (groups_to_user(grouplist, cred->group_info)) {
+
+			i = -EFAULT;
+
+			goto out;
+
+		}
+
+	}
+
+out:
+
+	return i;
 
 }
