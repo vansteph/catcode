@@ -1,0 +1,9 @@
+cff-version: 1.1.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: Black
+    given-names: Cat
+title: Black cat enhanced code
+version: black_cat_rules
+date-released: 2022-10-23
+            
