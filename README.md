@@ -1,4 +1,3 @@
 # catcode
-On my journey to becoming a open and FAIR researcher
-But you shouldn't stay here, go back to the escaperoom!
-We'll write documentation for the README at another time
+
+Forget about what was written before. The black cat has found a mini typo in your code. Its the small things that matter.. Of course, the black cat becomes immediatly a collaborator and you surely agree, alphabetical order for authors seems only FAIR.
